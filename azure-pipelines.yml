@@ -9,7 +9,9 @@ resources:
 variables:
   solution: '**/*.sln'
   buildConfiguration: 'Debug'
-  buildVersion: '$(Build.BuildNumber)'
+  packageVersion: '1.0.$(Build.BuildId)'
+  assemblyVersion: '1.0.0.0'
+  fileVersion: '1.0.$(Build.BuildId).0'
 
 stages:
 - stage: Build_Test
@@ -39,10 +41,11 @@ stages:
         arguments: >
           --configuration $(buildConfiguration)
           --no-restore
-          /p:Version=$(buildVersion)
-          /p:AssemblyVersion=$(buildVersion)
-          /p:FileVersion=$(buildVersion)
-          /p:InformationalVersion=$(buildVersion)
+          /p:Version=$(packageVersion)
+          /p:PackageVersion=$(packageVersion)
+          /p:AssemblyVersion=$(assemblyVersion)
+          /p:FileVersion=$(fileVersion)
+          /p:InformationalVersion=$(Build.BuildNumber)
           /p:GeneratePackageOnBuild=true
 
     - powershell: |
@@ -69,7 +72,7 @@ stages:
         packagesToPack: '**/*.csproj'
         nobuild: true
         versioningScheme: byEnvVar
-        versionEnvVar: buildVersion
+        versionEnvVar: packageVersion
         arguments: >
           --configuration $(buildConfiguration)
           --output $(Build.ArtifactStagingDirectory)
