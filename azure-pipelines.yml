@@ -68,13 +68,20 @@ stages:
     - powershell: |
         New-Item -ItemType Directory -Force -Path "$(Build.ArtifactStagingDirectory)" | Out-Null
 
-        Get-ChildItem -Path "$(Build.SourcesDirectory)" -Recurse -Filter *.nupkg |
-          Where-Object { $_.FullName -notlike "*\obj\*" } |
-          ForEach-Object {
-            Write-Host "Copying package: $($_.FullName)"
-            Copy-Item $_.FullName -Destination "$(Build.ArtifactStagingDirectory)" -Force
-          }
+        $packages = Get-ChildItem -Path "$(Build.SourcesDirectory)" -Recurse -Filter *.nupkg |
+          Where-Object { $_.FullName -notlike "*\obj\*" }
 
+        if (-not $packages) {
+          Write-Error "No .nupkg files found. Check whether the project is packable and GeneratePackageOnBuild is enabled."
+          exit 1
+        }
+
+        foreach ($package in $packages) {
+          Write-Host "Copying package: $($package.FullName)"
+          Copy-Item $package.FullName -Destination "$(Build.ArtifactStagingDirectory)" -Force
+        }
+
+        Write-Host "Packages in artifact staging directory:"
         Get-ChildItem -Path "$(Build.ArtifactStagingDirectory)" -Recurse
       displayName: Copy NuGet packages to artifacts
 
