@@ -17,7 +17,7 @@ namespace TEST
 		public MessageBoxInformation ToDo()
 		{
 
-			return new MessageBoxInformation("Czy wykonać operację ?")
+			return new MessageBoxInformation("Czy wykonać operację???")
 			{
 				Text = "Opis operacji",
 				YesHandler = () => "Operacja została zakończona!",
