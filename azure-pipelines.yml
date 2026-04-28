@@ -113,5 +113,5 @@ stages:
       inputs:
         command: push
         nuGetFeedType: internal
-        publishVstsFeed: 'NAZWA_TWOJEGO_FEEDA'
+        publishVstsFeed: 'TEST'
         packagesToPush: '$(Agent.BuildDirectory)/SamplesArtifacts/**/*.nupkg'
