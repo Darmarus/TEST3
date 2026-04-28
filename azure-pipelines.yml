@@ -5,7 +5,11 @@ trigger:
 
 resources:
 - repo: self
-  clean: true
+
+variables:
+  solution: '**/*.sln'
+  buildConfiguration: 'Debug'
+  buildVersion: '$(Build.BuildNumber)'
 
 stages:
 - stage: Build_Test
@@ -16,20 +20,30 @@ stages:
     timeoutInMinutes: 300
     pool:
       name: Default
-      demands:
-      - msbuild
-      - vstest
 
     steps:
     - checkout: self
       clean: true
 
-    - task: MSBuild@1
-      displayName: Restore and build
+    - task: DotNetCoreCLI@2
+      displayName: Restore
       inputs:
-        solution: '**/*.csproj'
-        configuration: Debug
-        msbuildArguments: '/r /p:GeneratePackageOnBuild=true'
+        command: restore
+        projects: '$(solution)'
+
+    - task: DotNetCoreCLI@2
+      displayName: Build
+      inputs:
+        command: build
+        projects: '$(solution)'
+        arguments: >
+          --configuration $(buildConfiguration)
+          --no-restore
+          /p:Version=$(buildVersion)
+          /p:AssemblyVersion=$(buildVersion)
+          /p:FileVersion=$(buildVersion)
+          /p:InformationalVersion=$(buildVersion)
+          /p:GeneratePackageOnBuild=true
 
     - powershell: |
         if (Get-ChildItem -Recurse -Filter *.UnitTest.csproj -File) {
@@ -46,27 +60,21 @@ stages:
       inputs:
         command: test
         projects: '**/*.UnitTest.csproj'
-        arguments: '--no-build --configuration Debug'
+        arguments: '--configuration $(buildConfiguration) --no-build'
 
-    - task: VisualStudioTestPlatformInstaller@1
-      displayName: Visual Studio Test Platform Installer
+    - task: DotNetCoreCLI@2
+      displayName: Pack NuGet packages
       inputs:
-        packageFeedSelector: nugetOrg
-        versionSelector: latestStable
+        command: pack
+        packagesToPack: '**/*.csproj'
+        nobuild: true
+        versioningScheme: byEnvVar
+        versionEnvVar: buildVersion
+        arguments: >
+          --configuration $(buildConfiguration)
+          --output $(Build.ArtifactStagingDirectory)
 
-    - task: VSTest@2
-      displayName: VsTest - test assemblies
-      continueOnError: true
-      inputs:
-        testSelector: testAssemblies
-        testAssemblyVer2: |
-          **\*test*.dll
-          !**\*TestAdapter.dll
-          !**\obj\**
-        searchFolder: $(System.DefaultWorkingDirectory)
-        vsTestVersion: toolsInstaller
-
-    - publish: $(System.DefaultWorkingDirectory)\bin
+    - publish: $(Build.ArtifactStagingDirectory)
       displayName: Publish artifacts
       artifact: SamplesArtifacts
 
