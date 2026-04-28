@@ -9,4 +9,7 @@
   <ItemGroup>
     <EmbeddedResource Remove="MyWorker1WorkerParams.Ogolne.pageform.xml" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="NUnit" Version="4.5.1" />
+  </ItemGroup>
 </Project>
