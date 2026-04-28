@@ -1,5 +1,9 @@
 name: $(Date:yyyyMMdd).$(Rev:r)
 
+trigger:
+- master
+
+
 resources:
 - repo: self
   clean: true
