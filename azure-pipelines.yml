@@ -42,11 +42,9 @@ stages:
           --configuration $(buildConfiguration)
           --no-restore
           /p:Version=$(packageVersion)
-          /p:PackageVersion=$(packageVersion)
           /p:AssemblyVersion=$(assemblyVersion)
           /p:FileVersion=$(fileVersion)
           /p:InformationalVersion=$(Build.BuildNumber)
-          /p:GeneratePackageOnBuild=true
 
     - powershell: |
         if (Get-ChildItem -Recurse -Filter *.UnitTest.csproj -File) {
@@ -66,52 +64,31 @@ stages:
         arguments: '--configuration $(buildConfiguration) --no-build'
 
     - powershell: |
-        New-Item -ItemType Directory -Force -Path "$(Build.ArtifactStagingDirectory)" | Out-Null
+        $artifactPath = "$(Build.ArtifactStagingDirectory)\dll"
+        New-Item -ItemType Directory -Force -Path $artifactPath | Out-Null
 
-        $packages = Get-ChildItem -Path "$(Build.SourcesDirectory)" -Recurse -Filter *.nupkg |
-          Where-Object { $_.FullName -notlike "*\obj\*" }
+        $dlls = Get-ChildItem -Path "$(Build.SourcesDirectory)" -Recurse -Filter *.dll |
+          Where-Object {
+            $_.FullName -like "*\bin\$(buildConfiguration)\*" -and
+            $_.FullName -notlike "*\obj\*" -and
+            $_.Name -notlike "*.resources.dll" -and
+            $_.Name -notlike "*Test*.dll"
+          }
 
-        if (-not $packages) {
-          Write-Error "No .nupkg files found. Check whether the project is packable and GeneratePackageOnBuild is enabled."
+        if (-not $dlls) {
+          Write-Error "No DLL files found in bin\$(buildConfiguration)."
           exit 1
         }
 
-        foreach ($package in $packages) {
-          Write-Host "Copying package: $($package.FullName)"
-          Copy-Item $package.FullName -Destination "$(Build.ArtifactStagingDirectory)" -Force
+        foreach ($dll in $dlls) {
+          Write-Host "Copying DLL: $($dll.FullName)"
+          Copy-Item $dll.FullName -Destination $artifactPath -Force
         }
 
-        Write-Host "Packages in artifact staging directory:"
-        Get-ChildItem -Path "$(Build.ArtifactStagingDirectory)" -Recurse
-      displayName: Copy NuGet packages to artifacts
+        Write-Host "Published DLL files:"
+        Get-ChildItem -Path $artifactPath -Recurse
+      displayName: Copy DLL files to artifacts
 
-    - publish: $(Build.ArtifactStagingDirectory)
-      displayName: Publish artifacts
-      artifact: SamplesArtifacts
-
-- stage: Deploy
-  displayName: Deploy
-  dependsOn: Build_Test
-  condition: succeeded()
-  jobs:
-  - job: Deploy
-    displayName: Push NuGet packages to Azure Artifacts
-    pool:
-      name: Default
-
-    steps:
-    - checkout: none
-
-    - download: current
-      artifact: SamplesArtifacts
-
-    - task: NuGetToolInstaller@1
-      displayName: Install NuGet
-
-    - task: NuGetCommand@2
-      displayName: Push packages to Azure Artifacts
-      inputs:
-        command: push
-        nuGetFeedType: internal
-        publishVstsFeed: 'TEST'
-        packagesToPush: '$(Agent.BuildDirectory)/SamplesArtifacts/**/*.nupkg'
+    - publish: $(Build.ArtifactStagingDirectory)\dll
+      displayName: Publish DLL artifact
+      artifact: DllArtifacts
