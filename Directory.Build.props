@@ -3,5 +3,9 @@
   <PropertyGroup>
     <SonetaPackageVersion>2604.1.1</SonetaPackageVersion>
     <SonetaTargetFramework>net8.0</SonetaTargetFramework>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>Twoja.Paczka</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Darmarus</Authors>
   </PropertyGroup>
 </Project>
