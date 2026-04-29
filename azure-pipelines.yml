@@ -15,7 +15,7 @@ variables:
 
   # === DEPLOY ===
   enovaPluginsPath: 'C:\enova365\Soneta\plugins'           # <-- ścieżka do folderu pluginów enova
-  enovaServiceName: 'Soneta Server'                        # <-- nazwa usługi enova
+  enovaServiceName: 'Soneta Server'                        # <-- nazwa usługi enova (jeśli trzeba restart)
 
 stages:
 # ============================================================
@@ -40,11 +40,16 @@ stages:
         packageType: 'sdk'
         version: '8.0.x'
 
+    - task: NuGetAuthenticate@1
+      displayName: Authenticate to NuGet feeds
+
     - task: DotNetCoreCLI@2
       displayName: Restore NuGet
       inputs:
         command: restore
         projects: '$(projects)'
+        feedsToUse: 'config'
+        nugetConfigPath: 'NuGet.config'
 
     - task: DotNetCoreCLI@2
       displayName: Build
