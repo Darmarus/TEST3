@@ -23,12 +23,16 @@ stages:
     timeoutInMinutes: 300
     pool:
       name: Default
-      demands:
-      - dotnet
 
     steps:
     - checkout: self
       clean: true
+
+    - task: UseDotNet@2
+      displayName: Install .NET SDK
+      inputs:
+        packageType: 'sdk'
+        version: '8.0.x'
 
     - task: DotNetCoreCLI@2
       displayName: Restore
@@ -50,7 +54,16 @@ stages:
           /p:FileVersion=$(fileVersion)
           /p:InformationalVersion=$(Build.BuildNumber)
 
-    - publish: $(System.DefaultWorkingDirectory)\bin
+    - task: CopyFiles@2
+      displayName: Copy build outputs and packages
+      inputs:
+        SourceFolder: '$(System.DefaultWorkingDirectory)'
+        Contents: |
+          **\bin\$(buildConfiguration)\**
+          **\*.nupkg
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+    - publish: $(Build.ArtifactStagingDirectory)
       displayName: Publish artifacts
       artifact: $(artifactName)
 
@@ -60,12 +73,16 @@ stages:
     timeoutInMinutes: 300
     pool:
       name: Default
-      demands:
-      - vstest
 
     steps:
     - checkout: self
       clean: false
+
+    - task: UseDotNet@2
+      displayName: Install .NET SDK
+      inputs:
+        packageType: 'sdk'
+        version: '8.0.x'
 
     - powershell: |
         if (Get-ChildItem -Recurse -Filter *.UnitTest.csproj -File) {
