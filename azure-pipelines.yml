@@ -9,18 +9,24 @@ resources:
 variables:
   projects: '**/*.csproj'
   buildConfiguration: 'Release'
-  pluginName: 'Soneta.KadryPlace.Reports'   # <-- nazwa Twojego projektu
+  pluginName: 'testdll'                  # <-- nazwa Twojego projektu/DLL
   versionNumber: '$(date:yyMM).$(Build.BuildId).$(date:dd).$(date:HHmm)'
   artifactName: 'drop'
-  isNotPR: $[ne(variables['Build.Reason'], 'PullRequest')]
+
+  # === DEPLOY ===
+  enovaPluginsPath: 'C:\enova365\Soneta\plugins'           # <-- ścieżka do folderu pluginów enova
+  enovaServiceName: 'Soneta Server'                        # <-- nazwa usługi enova
 
 stages:
-- stage: Build_Test
-  displayName: Build and test
+# ============================================================
+# STAGE 1: BUILD
+# ============================================================
+- stage: Build
+  displayName: Build plugin
   jobs:
-  - job: Build
+  - job: BuildJob
     displayName: Build
-    timeoutInMinutes: 300
+    timeoutInMinutes: 60
     pool:
       name: Default
 
@@ -29,20 +35,19 @@ stages:
       clean: true
 
     - task: UseDotNet@2
-      displayName: Install .NET SDK
+      displayName: Install .NET 8 SDK
       inputs:
         packageType: 'sdk'
         version: '8.0.x'
 
     - task: DotNetCoreCLI@2
-      displayName: Restore
+      displayName: Restore NuGet
       inputs:
         command: restore
         projects: '$(projects)'
 
     - task: DotNetCoreCLI@2
       displayName: Build
-      condition: and(succeeded(), eq(variables.isNotPR, true))
       inputs:
         command: build
         projects: '$(projects)'
@@ -59,7 +64,6 @@ stages:
 
     - task: PublishSymbols@2
       displayName: Publish symbols
-      condition: and(succeeded(), eq(variables.isNotPR, true))
       inputs:
         SearchPattern: '**\bin\$(buildConfiguration)\**\*.pdb'
         PublishSymbols: false
@@ -67,7 +71,6 @@ stages:
 
     - task: CopyFiles@2
       displayName: Copy plugin DLL to staging
-      condition: and(succeeded(), eq(variables.isNotPR, true))
       inputs:
         SourceFolder: '$(System.DefaultWorkingDirectory)'
         Contents: |
@@ -77,6 +80,64 @@ stages:
         flattenFolders: true
 
     - publish: $(Build.ArtifactStagingDirectory)
-      displayName: Publish artifacts
-      condition: and(succeeded(), eq(variables.isNotPR, true))
+      displayName: Publish artifact
       artifact: $(artifactName)
+
+# ============================================================
+# STAGE 2: DEPLOY (auto po udanym buildzie)
+# ============================================================
+- stage: Deploy
+  displayName: Deploy to enova365
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: DeployJob
+    displayName: Deploy plugin
+    pool:
+      name: Default
+    environment: 'enova365-prod'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: $(artifactName)
+
+          - task: PowerShell@2
+            displayName: Stop enova365 service
+            inputs:
+              targetType: 'inline'
+              script: |
+                $svc = Get-Service -Name "$(enovaServiceName)" -ErrorAction SilentlyContinue
+                if ($svc -and $svc.Status -eq 'Running') {
+                  Write-Host "Stopping $(enovaServiceName)..."
+                  Stop-Service -Name "$(enovaServiceName)" -Force
+                  Start-Sleep -Seconds 5
+                } else {
+                  Write-Host "Service not running or not found - skipping stop."
+                }
+            continueOnError: true
+
+          - task: CopyFiles@2
+            displayName: Copy DLL to enova plugins folder
+            inputs:
+              SourceFolder: '$(Pipeline.Workspace)/$(artifactName)'
+              Contents: |
+                $(pluginName).dll
+                $(pluginName).pdb
+              TargetFolder: '$(enovaPluginsPath)'
+              OverWrite: true
+
+          - task: PowerShell@2
+            displayName: Start enova365 service
+            inputs:
+              targetType: 'inline'
+              script: |
+                $svc = Get-Service -Name "$(enovaServiceName)" -ErrorAction SilentlyContinue
+                if ($svc) {
+                  Write-Host "Starting $(enovaServiceName)..."
+                  Start-Service -Name "$(enovaServiceName)"
+                } else {
+                  Write-Host "Service not found - skipping start."
+                }
+            continueOnError: true
