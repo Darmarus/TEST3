@@ -1,4 +1,4 @@
-name: $(Date:yyyyMMdd).$(Rev:r)
+name: $(date:yyMM).$(Build.BuildId).$(date:dd).$(date:HHmm)
 
 trigger:
 - master
@@ -8,11 +8,11 @@ resources:
 
 variables:
   projects: '**/*.csproj'
-  buildConfiguration: 'Debug'
-  packageVersion: '1.0.$(Build.BuildId)'
-  assemblyVersion: '1.0.0.0'
-  fileVersion: '1.0.$(Build.BuildId).0'
-  artifactName: 'SamplesArtifacts'
+  buildConfiguration: 'Release'
+  pluginName: 'Soneta.KadryPlace.Reports'   # <-- nazwa Twojego projektu
+  versionNumber: '$(date:yyMM).$(Build.BuildId).$(date:dd).$(date:HHmm)'
+  artifactName: 'drop'
+  isNotPR: $[ne(variables['Build.Reason'], 'PullRequest')]
 
 stages:
 - stage: Build_Test
@@ -41,89 +41,42 @@ stages:
         projects: '$(projects)'
 
     - task: DotNetCoreCLI@2
-      displayName: Build and generate packages
+      displayName: Build
+      condition: and(succeeded(), eq(variables.isNotPR, true))
       inputs:
         command: build
         projects: '$(projects)'
         arguments: >
           --configuration $(buildConfiguration)
           --no-restore
-          /p:GeneratePackageOnBuild=true
-          /p:Version=$(packageVersion)
-          /p:AssemblyVersion=$(assemblyVersion)
-          /p:FileVersion=$(fileVersion)
-          /p:InformationalVersion=$(Build.BuildNumber)
+          /p:Version=$(versionNumber)
+          /p:AssemblyVersion=$(versionNumber)
+          /p:FileVersion=$(versionNumber)
+          /p:InformationalVersion=$(versionNumber)
+          /p:Product=$(Build.DefinitionName)
+          /p:Company="Agemit Sp. z o.o."
+          /p:Copyright="Copyright © $(date:yyyy) Agemit Sp. z o.o."
+
+    - task: PublishSymbols@2
+      displayName: Publish symbols
+      condition: and(succeeded(), eq(variables.isNotPR, true))
+      inputs:
+        SearchPattern: '**\bin\$(buildConfiguration)\**\*.pdb'
+        PublishSymbols: false
+      continueOnError: true
 
     - task: CopyFiles@2
-      displayName: Copy build outputs and packages
+      displayName: Copy plugin DLL to staging
+      condition: and(succeeded(), eq(variables.isNotPR, true))
       inputs:
         SourceFolder: '$(System.DefaultWorkingDirectory)'
         Contents: |
-          **\bin\$(buildConfiguration)\**
-          **\*.nupkg
+          **\bin\$(buildConfiguration)\**\$(pluginName).dll
+          **\bin\$(buildConfiguration)\**\$(pluginName).pdb
         TargetFolder: '$(Build.ArtifactStagingDirectory)'
+        flattenFolders: true
 
     - publish: $(Build.ArtifactStagingDirectory)
       displayName: Publish artifacts
+      condition: and(succeeded(), eq(variables.isNotPR, true))
       artifact: $(artifactName)
-
-  - job: Tests
-    displayName: Tests
-    dependsOn: Build
-    timeoutInMinutes: 300
-    pool:
-      name: Default
-
-    steps:
-    - checkout: self
-      clean: false
-
-    - task: UseDotNet@2
-      displayName: Install .NET SDK
-      inputs:
-        packageType: 'sdk'
-        version: '8.0.x'
-
-    - powershell: |
-        if (Get-ChildItem -Recurse -Filter *.UnitTest.csproj -File) {
-          Write-Host "##vso[task.setVariable variable=RunUnitTests]True"
-        }
-        else {
-          Write-Host "##vso[task.setVariable variable=RunUnitTests]False"
-        }
-      displayName: Discover unit tests
-
-    - task: DotNetCoreCLI@2
-      condition: and(succeeded(), eq(variables['RunUnitTests'], 'True'))
-      displayName: Run unit tests
-      inputs:
-        command: test
-        projects: '**/*.UnitTest.csproj'
-        arguments: '--configuration $(buildConfiguration) --no-build'
-
-    - powershell: Start-SonetaTestInfrastructure
-      displayName: Starts integration tests infrastructure
-      continueOnError: true
-
-    - task: VisualStudioTestPlatformInstaller@1
-      displayName: Visual Studio Test Platform Installer
-      inputs:
-        packageFeedSelector: nugetOrg
-        versionSelector: latestStable
-
-    - task: VSTest@2
-      displayName: VsTest - test assemblies
-      continueOnError: true
-      inputs:
-        testSelector: testAssemblies
-        testAssemblyVer2: |
-          **\*test*.dll
-          !**\*TestAdapter.dll
-          !**\obj\**
-        searchFolder: $(System.DefaultWorkingDirectory)
-        vsTestVersion: toolsInstaller
-
-    - powershell: Stop-SonetaTestInfrastructure
-      displayName: Stops integration tests infrastructure
-      condition: always()
-      continueOnError: true
