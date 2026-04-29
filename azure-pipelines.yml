@@ -1,82 +1,70 @@
-name: $(date:yyMM).$(Build.BuildId).$(date:dd).$(date:HHmm)
-
 trigger:
 - master
 
-resources:
-- repo: self
+pool:
+  name: Default
+  demands:
+  - msbuild
+  - visualstudio
 
 variables:
-  projects: '**/*.csproj'
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
-  pluginName: 'Soneta.KadryPlace.Reports'   # <-- nazwa Twojego projektu
-  versionNumber: '$(date:yyMM).$(Build.BuildId).$(date:dd).$(date:HHmm)'
-  artifactName: 'drop'
-  isNotPR: $[ne(variables['Build.Reason'], 'PullRequest')]
+  
+steps:
+- task: NuGetToolInstaller@1
 
-stages:
-- stage: Build_Test
-  displayName: Build and test
-  jobs:
-  - job: Build
-    displayName: Build
-    timeoutInMinutes: 300
-    pool:
-      name: Default
+- task: NuGetCommand@2
+  inputs:
+    restoreSolution: '$(solution)'
 
-    steps:
-    - checkout: self
-      clean: true
+- task: DotNetCoreCLI@2
+  inputs:
+    FileNames: |
+      **\AssemblyInfo.cs
+      **\AssemblyInfo.vb
+      **\GlobalInfo.vb
+      **\GlobalInfo.cs
+      **/NetCoreLib.csproj
+      **/NetCoreConsoleApp.csproj
+      **/NetCoreWebApp.csproj
+    InsertAttributes: true
+    WriteBOM: true
+    Title: '$(Build.DefinitionName)'
+    Product: '$(Build.DefinitionName)'
+    Company: 'Agemit Sp. z o.o.'
+    Copyright: 'Copyright © $(date:DD MMMM YYYY) Agemit Sp. z o.o.'
+    Trademark: MD
+    VersionNumber: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
+    FileVersionNumber: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
+    InformationalVersion: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
 
-    - task: UseDotNet@2
-      displayName: Install .NET SDK
-      inputs:
-        packageType: 'sdk'
-        version: '8.0.x'
 
-    - task: DotNetCoreCLI@2
-      displayName: Restore
-      inputs:
-        command: restore
-        projects: '$(projects)'
+- task: VSBuild@1
+  inputs:
+    solution: '$(solution)'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
 
-    - task: DotNetCoreCLI@2
-      displayName: Build
-      condition: and(succeeded(), eq(variables.isNotPR, true))
-      inputs:
-        command: build
-        projects: '$(projects)'
-        arguments: >
-          --configuration $(buildConfiguration)
-          --no-restore
-          /p:Version=$(versionNumber)
-          /p:AssemblyVersion=$(versionNumber)
-          /p:FileVersion=$(versionNumber)
-          /p:InformationalVersion=$(versionNumber)
-          /p:Product=$(Build.DefinitionName)
-          /p:Company="Agemit Sp. z o.o."
-          /p:Copyright="Copyright © $(date:yyyy) Agemit Sp. z o.o."
+- task: PublishSymbols@2
+  displayName: 'Publish symbols path'
+  inputs:
+    SearchPattern: '**\bin\**\*.pdb'
+    PublishSymbols: false
+  continueOnError: true
 
-    - task: PublishSymbols@2
-      displayName: Publish symbols
-      condition: and(succeeded(), eq(variables.isNotPR, true))
-      inputs:
-        SearchPattern: '**\bin\$(buildConfiguration)\**\*.pdb'
-        PublishSymbols: false
-      continueOnError: true
 
-    - task: CopyFiles@2
-      displayName: Copy plugin DLL to staging
-      condition: and(succeeded(), eq(variables.isNotPR, true))
-      inputs:
-        SourceFolder: '$(System.DefaultWorkingDirectory)'
-        Contents: |
-          **\bin\$(buildConfiguration)\**\$(pluginName).dll
-          **\bin\$(buildConfiguration)\**\$(pluginName).pdb
-        TargetFolder: '$(Build.ArtifactStagingDirectory)'
-        flattenFolders: true
+- task: CopyFiles@2
+  displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
+  inputs:
+    SourceFolder: '$(system.defaultworkingdirectory)'
+    Contents: '**\bin\Release\**'
+    TargetFolder: '$(build.artifactstagingdirectory)'
+  condition: succeededOrFailed()
 
-    - publish: $(Build.ArtifactStagingDirectory)
-      displayName: Publish artifacts
-      condition: and(succeeded(), eq(variables.isNotPR, true))
-      artifact: $(artifactName)
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact: drop'
+  inputs:
+    PathtoPublish: '$(build.artifactstagingdirectory)'
+  condition: succeededOrFailed()
