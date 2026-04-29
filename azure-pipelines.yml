@@ -8,7 +8,7 @@ resources:
 
 variables:
   solution: '**/*.sln'
-  buildConfiguration: 'Debug'
+  buildConfiguration: 'Release'
   packageVersion: '1.0.$(Build.BuildId)'
   assemblyVersion: '1.0.0.0'
   fileVersion: '1.0.$(Build.BuildId).0'
@@ -20,6 +20,7 @@ stages:
   - job: Build_Test
     displayName: Build and test
     timeoutInMinutes: 300
+
     pool:
       name: Default
 
@@ -63,32 +64,17 @@ stages:
         projects: '**/*.UnitTest.csproj'
         arguments: '--configuration $(buildConfiguration) --no-build'
 
-    - powershell: |
-        $artifactPath = "$(Build.ArtifactStagingDirectory)\dll"
-        New-Item -ItemType Directory -Force -Path $artifactPath | Out-Null
+    - task: CopyFiles@2
+      displayName: 'Copy Files to: $(Build.ArtifactStagingDirectory)'
+      inputs:
+        SourceFolder: '$(Build.SourcesDirectory)'
+        Contents: '**\bin\$(buildConfiguration)\**'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+      condition: succeededOrFailed()
 
-        $dlls = Get-ChildItem -Path "$(Build.SourcesDirectory)" -Recurse -Filter *.dll |
-          Where-Object {
-            $_.FullName -like "*\bin\$(buildConfiguration)\*" -and
-            $_.FullName -notlike "*\obj\*" -and
-            $_.Name -notlike "*.resources.dll" -and
-            $_.Name -notlike "*Test*.dll"
-          }
-
-        if (-not $dlls) {
-          Write-Error "No DLL files found in bin\$(buildConfiguration)."
-          exit 1
-        }
-
-        foreach ($dll in $dlls) {
-          Write-Host "Copying DLL: $($dll.FullName)"
-          Copy-Item $dll.FullName -Destination $artifactPath -Force
-        }
-
-        Write-Host "Published DLL files:"
-        Get-ChildItem -Path $artifactPath -Recurse
-      displayName: Copy DLL files to artifacts
-
-    - publish: $(Build.ArtifactStagingDirectory)\dll
-      displayName: Publish DLL artifact
-      artifact: DllArtifacts
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifact: drop'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+      condition: succeededOrFailed()
