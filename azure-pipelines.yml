@@ -7,22 +7,24 @@ resources:
 - repo: self
 
 variables:
-  solution: '**/*.sln'
-  buildConfiguration: 'Release'
+  projects: '**/*.csproj'
+  buildConfiguration: 'Debug'
   packageVersion: '1.0.$(Build.BuildId)'
   assemblyVersion: '1.0.0.0'
   fileVersion: '1.0.$(Build.BuildId).0'
+  artifactName: 'SamplesArtifacts'
 
 stages:
 - stage: Build_Test
   displayName: Build and test
   jobs:
-  - job: Build_Test
-    displayName: Build and test
+  - job: Build
+    displayName: Build
     timeoutInMinutes: 300
-
     pool:
       name: Default
+      demands:
+      - dotnet
 
     steps:
     - checkout: self
@@ -32,20 +34,38 @@ stages:
       displayName: Restore
       inputs:
         command: restore
-        projects: '$(solution)'
+        projects: '$(projects)'
 
     - task: DotNetCoreCLI@2
-      displayName: Build
+      displayName: Build and generate packages
       inputs:
         command: build
-        projects: '$(solution)'
+        projects: '$(projects)'
         arguments: >
           --configuration $(buildConfiguration)
           --no-restore
+          /p:GeneratePackageOnBuild=true
           /p:Version=$(packageVersion)
           /p:AssemblyVersion=$(assemblyVersion)
           /p:FileVersion=$(fileVersion)
           /p:InformationalVersion=$(Build.BuildNumber)
+
+    - publish: $(System.DefaultWorkingDirectory)\bin
+      displayName: Publish artifacts
+      artifact: $(artifactName)
+
+  - job: Tests
+    displayName: Tests
+    dependsOn: Build
+    timeoutInMinutes: 300
+    pool:
+      name: Default
+      demands:
+      - vstest
+
+    steps:
+    - checkout: self
+      clean: false
 
     - powershell: |
         if (Get-ChildItem -Recurse -Filter *.UnitTest.csproj -File) {
@@ -64,17 +84,29 @@ stages:
         projects: '**/*.UnitTest.csproj'
         arguments: '--configuration $(buildConfiguration) --no-build'
 
-    - task: CopyFiles@2
-      displayName: 'Copy Files to: $(Build.ArtifactStagingDirectory)'
-      inputs:
-        SourceFolder: '$(Build.SourcesDirectory)'
-        Contents: '**\bin\$(buildConfiguration)\**'
-        TargetFolder: '$(Build.ArtifactStagingDirectory)'
-      condition: succeededOrFailed()
+    - powershell: Start-SonetaTestInfrastructure
+      displayName: Starts integration tests infrastructure
+      continueOnError: true
 
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish Artifact: drop'
+    - task: VisualStudioTestPlatformInstaller@1
+      displayName: Visual Studio Test Platform Installer
       inputs:
-        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-        ArtifactName: 'drop'
-      condition: succeededOrFailed()
+        packageFeedSelector: nugetOrg
+        versionSelector: latestStable
+
+    - task: VSTest@2
+      displayName: VsTest - test assemblies
+      continueOnError: true
+      inputs:
+        testSelector: testAssemblies
+        testAssemblyVer2: |
+          **\*test*.dll
+          !**\*TestAdapter.dll
+          !**\obj\**
+        searchFolder: $(System.DefaultWorkingDirectory)
+        vsTestVersion: toolsInstaller
+
+    - powershell: Stop-SonetaTestInfrastructure
+      displayName: Stops integration tests infrastructure
+      condition: always()
+      continueOnError: true
