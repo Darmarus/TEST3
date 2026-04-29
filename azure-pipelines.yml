@@ -1,148 +1,70 @@
-name: $(date:yyMM).$(Build.BuildId).$(date:dd).$(date:HHmm)
-
 trigger:
 - master
 
-resources:
-- repo: self
+pool:
+  vmImage: 'windows-latest'
+  demands:
+  - msbuild
+  - visualstudio
 
 variables:
-  projects: '**/*.csproj'
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
-  pluginName: 'testdll'                  # <-- nazwa Twojego projektu/DLL
-  versionNumber: '$(date:yyMM).$(Build.BuildId).$(date:dd).$(date:HHmm)'
-  artifactName: 'drop'
+  
+steps:
+- task: NuGetToolInstaller@1
 
-  # === DEPLOY ===
-  enovaPluginsPath: 'C:\enova365\Soneta\plugins'           # <-- ścieżka do folderu pluginów enova
-  enovaServiceName: 'Soneta Server'                        # <-- nazwa usługi enova (jeśli trzeba restart)
+- task: NuGetCommand@2
+  inputs:
+    restoreSolution: '$(solution)'
 
-stages:
-# ============================================================
-# STAGE 1: BUILD
-# ============================================================
-- stage: Build
-  displayName: Build plugin
-  jobs:
-  - job: BuildJob
-    displayName: Build
-    timeoutInMinutes: 60
-    pool:
-      name: Default
+- task: DotNetCoreCLI@2
+  inputs:
+    FileNames: |
+      **\AssemblyInfo.cs
+      **\AssemblyInfo.vb
+      **\GlobalInfo.vb
+      **\GlobalInfo.cs
+      **/NetCoreLib.csproj
+      **/NetCoreConsoleApp.csproj
+      **/NetCoreWebApp.csproj
+    InsertAttributes: true
+    WriteBOM: true
+    Title: '$(Build.DefinitionName)'
+    Product: '$(Build.DefinitionName)'
+    Company: 'Agemit Sp. z o.o.'
+    Copyright: 'Copyright © $(date:DD MMMM YYYY) Agemit Sp. z o.o.'
+    Trademark: MD
+    VersionNumber: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
+    FileVersionNumber: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
+    InformationalVersion: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
 
-    steps:
-    - checkout: self
-      clean: true
 
-    - task: UseDotNet@2
-      displayName: Install .NET 8 SDK
-      inputs:
-        packageType: 'sdk'
-        version: '8.0.x'
+- task: VSBuild@1
+  inputs:
+    solution: '$(solution)'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
 
-    - task: NuGetAuthenticate@1
-      displayName: Authenticate to NuGet feeds
+- task: PublishSymbols@2
+  displayName: 'Publish symbols path'
+  inputs:
+    SearchPattern: '**\bin\**\*.pdb'
+    PublishSymbols: false
+  continueOnError: true
 
-    - task: DotNetCoreCLI@2
-      displayName: Restore NuGet
-      inputs:
-        command: restore
-        projects: '$(projects)'
-        feedsToUse: 'config'
-        nugetConfigPath: 'NuGet.config'
 
-    - task: DotNetCoreCLI@2
-      displayName: Build
-      inputs:
-        command: build
-        projects: '$(projects)'
-        arguments: >
-          --configuration $(buildConfiguration)
-          --no-restore
-          /p:Version=$(versionNumber)
-          /p:AssemblyVersion=$(versionNumber)
-          /p:FileVersion=$(versionNumber)
-          /p:InformationalVersion=$(versionNumber)
-          /p:Product=$(Build.DefinitionName)
-          /p:Company="Agemit Sp. z o.o."
-          /p:Copyright="Copyright © $(date:yyyy) Agemit Sp. z o.o."
+- task: CopyFiles@2
+  displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
+  inputs:
+    SourceFolder: '$(system.defaultworkingdirectory)'
+    Contents: '**\bin\Release\**'
+    TargetFolder: '$(build.artifactstagingdirectory)'
+  condition: succeededOrFailed()
 
-    - task: PublishSymbols@2
-      displayName: Publish symbols
-      inputs:
-        SearchPattern: '**\bin\$(buildConfiguration)\**\*.pdb'
-        PublishSymbols: false
-      continueOnError: true
-
-    - task: CopyFiles@2
-      displayName: Copy plugin DLL to staging
-      inputs:
-        SourceFolder: '$(System.DefaultWorkingDirectory)'
-        Contents: |
-          **\bin\$(buildConfiguration)\**\$(pluginName).dll
-          **\bin\$(buildConfiguration)\**\$(pluginName).pdb
-        TargetFolder: '$(Build.ArtifactStagingDirectory)'
-        flattenFolders: true
-
-    - publish: $(Build.ArtifactStagingDirectory)
-      displayName: Publish artifact
-      artifact: $(artifactName)
-
-# ============================================================
-# STAGE 2: DEPLOY (auto po udanym buildzie)
-# ============================================================
-- stage: Deploy
-  displayName: Deploy to enova365
-  dependsOn: Build
-  condition: succeeded()
-  jobs:
-  - deployment: DeployJob
-    displayName: Deploy plugin
-    pool:
-      name: Default
-    environment: 'enova365-prod'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - download: current
-            artifact: $(artifactName)
-
-          - task: PowerShell@2
-            displayName: Stop enova365 service
-            inputs:
-              targetType: 'inline'
-              script: |
-                $svc = Get-Service -Name "$(enovaServiceName)" -ErrorAction SilentlyContinue
-                if ($svc -and $svc.Status -eq 'Running') {
-                  Write-Host "Stopping $(enovaServiceName)..."
-                  Stop-Service -Name "$(enovaServiceName)" -Force
-                  Start-Sleep -Seconds 5
-                } else {
-                  Write-Host "Service not running or not found - skipping stop."
-                }
-            continueOnError: true
-
-          - task: CopyFiles@2
-            displayName: Copy DLL to enova plugins folder
-            inputs:
-              SourceFolder: '$(Pipeline.Workspace)/$(artifactName)'
-              Contents: |
-                $(pluginName).dll
-                $(pluginName).pdb
-              TargetFolder: '$(enovaPluginsPath)'
-              OverWrite: true
-
-          - task: PowerShell@2
-            displayName: Start enova365 service
-            inputs:
-              targetType: 'inline'
-              script: |
-                $svc = Get-Service -Name "$(enovaServiceName)" -ErrorAction SilentlyContinue
-                if ($svc) {
-                  Write-Host "Starting $(enovaServiceName)..."
-                  Start-Service -Name "$(enovaServiceName)"
-                } else {
-                  Write-Host "Service not found - skipping start."
-                }
-            continueOnError: true
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact: drop'
+  inputs:
+    PathtoPublish: '$(build.artifactstagingdirectory)'
+  condition: succeededOrFailed()
