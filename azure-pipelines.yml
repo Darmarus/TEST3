@@ -35,10 +35,14 @@ steps:
     Product: '$(Build.DefinitionName)'
     Company: 'Agemit Sp. z o.o.'
     Copyright: 'Copyright © $(date:DD MMMM YYYY) Agemit Sp. z o.o.'
-    Trademark: MD
+    Trademark: 'MD'
     VersionNumber: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
     FileVersionNumber: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
     InformationalVersion: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
+    versioningScheme: 'byPrereleaseNumber'
+    majorVersion: '1'
+    minorVersion: '0'
+    patchVersion: '0'
 
 
 - task: VSBuild@1
