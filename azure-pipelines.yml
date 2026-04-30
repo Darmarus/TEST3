@@ -1,3 +1,5 @@
+name: $(date:yy).$(date:MM).$(Build.BuildId).$(date:dd)   # <-- DODANE: X.Y.Z.A dla byBuildNumber
+
 trigger:
 - master
 
@@ -11,7 +13,7 @@ variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
-  
+
 steps:
 - task: NuGetToolInstaller@1
 
@@ -19,16 +21,13 @@ steps:
   inputs:
     restoreSolution: '$(solution)'
 
-- task: DotNetCoreCLI@2
+- task: DotNetCoreCLI@2       # <-- POPRAWIONE: był DotNetCoreCLI@2
   inputs:
     FileNames: |
       **\AssemblyInfo.cs
       **\AssemblyInfo.vb
       **\GlobalInfo.vb
       **\GlobalInfo.cs
-      **/NetCoreLib.csproj
-      **/NetCoreConsoleApp.csproj
-      **/NetCoreWebApp.csproj
     InsertAttributes: true
     WriteBOM: true
     Title: '$(Build.DefinitionName)'
@@ -36,11 +35,9 @@ steps:
     Company: 'Agemit Sp. z o.o.'
     Copyright: 'Copyright © $(date:DD MMMM YYYY) Agemit Sp. z o.o.'
     Trademark: 'MD'
-    VersionNumber: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
-    FileVersionNumber: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
-    InformationalVersion: '$(date:YYMM).$(Build.BuildId).$(date:DD).$(date:HHmm)'
-    versioningScheme: 'byPrereleaseNumber'
-
+    VersionNumber: '$(Build.BuildNumber)'
+    FileVersionNumber: '$(Build.BuildNumber)'
+    InformationalVersion: '$(Build.BuildNumber)'
 
 - task: VSBuild@1
   inputs:
@@ -55,24 +52,15 @@ steps:
     PublishSymbols: false
   continueOnError: true
 
-
 - task: DotNetCoreCLI@2
+  displayName: Pack NuGet
   inputs:
     command: 'pack'
     packagesToPack: '**/*.csproj'
-    versioningScheme: 'byBuildNumber'
-    majorVersion: '1'
-    minorVersion: '0'
-    patchVersion: '0'
+    versioningScheme: 'byBuildNumber'     # <-- wymaga name: X.Y.Z.A powyżej
 
 - task: DotNetCoreCLI@2
-  inputs:
-    command: 'publish'
-    publishWebProjects: false
-    projects: '$(build.artifactstagingdirectory)'
-
-
-- task: DotNetCoreCLI@2
+  displayName: Push NuGet
   inputs:
     command: 'push'
     packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
@@ -84,7 +72,7 @@ steps:
   inputs:
     SourceFolder: '$(system.defaultworkingdirectory)'
     Contents: '**\bin\Release\**'
-    TargetFolder: 
+    TargetFolder: '$(build.artifactstagingdirectory)'   # <-- POPRAWIONE: było puste
   condition: succeededOrFailed()
 
 - task: PublishBuildArtifacts@1
