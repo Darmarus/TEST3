@@ -59,6 +59,16 @@ steps:
   continueOnError: true
 
 
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'pack'
+    packagesToPack: '**/*.csproj'
+    versioningScheme: 'byBuildNumber'
+    majorVersion: '1'
+    minorVersion: '0'
+    patchVersion: '0'
+
+
 - task: CopyFiles@2
   displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
   inputs:
