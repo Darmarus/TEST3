@@ -68,13 +68,19 @@ steps:
     minorVersion: '0'
     patchVersion: '0'
 
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'publish'
+    publishWebProjects: false
+    projects: '$(build.artifactstagingdirectory)'
+
 
 - task: CopyFiles@2
   displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
   inputs:
     SourceFolder: '$(system.defaultworkingdirectory)'
     Contents: '**\bin\Release\**'
-    TargetFolder: '$(build.artifactstagingdirectory)'
+    TargetFolder: 
   condition: succeededOrFailed()
 
 - task: PublishBuildArtifacts@1
