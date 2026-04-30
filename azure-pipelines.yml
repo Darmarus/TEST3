@@ -54,14 +54,6 @@ steps:
 
 
 
-- task: DotNetCoreCLI@2
-  displayName: Push NuGet
-  inputs:
-    command: 'push'
-    packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
-    nuGetFeedType: 'internal'
-    publishVstsFeed: '6b3ef981-1ad3-4a2e-a606-043eabdea1c2/71a35d9c-afac-448c-aa33-ed90320f1cb2'
-
 - task: CopyFiles@2
   displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
   inputs:
