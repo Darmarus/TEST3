@@ -52,12 +52,7 @@ steps:
     PublishSymbols: false
   continueOnError: true
 
-- task: DotNetCoreCLI@2
-  displayName: Pack NuGet
-  inputs:
-    command: 'pack'
-    packagesToPack: '**/*.csproj'
-    versioningScheme: 'byBuildNumber'     # <-- wymaga name: X.Y.Z.A powyżej
+
 
 - task: DotNetCoreCLI@2
   displayName: Push NuGet
