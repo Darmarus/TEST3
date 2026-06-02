@@ -55,11 +55,11 @@ steps:
 
 
 - task: CopyFiles@2
-  displayName: 'Copy output files to artifact staging'
+  displayName: 'Copy Files to: $(build.artifactstagingdirectory)'
   inputs:
-    SourceFolder: '$(Build.SourcesDirectory)\TEST\bin\Release\net8.0'
-    Contents: '**'
-    TargetFolder: '$(Build.ArtifactStagingDirectory)'
+    SourceFolder: '$(system.defaultworkingdirectory)'
+    Contents: '**\bin\Release\**'
+    TargetFolder: '$(build.artifactstagingdirectory)'
   condition: succeededOrFailed()
 
 - task: PublishBuildArtifacts@1
