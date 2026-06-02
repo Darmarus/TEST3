@@ -21,7 +21,7 @@ namespace TEST
 			{
 				Text = "Opis operacji",
 				YesHandler = () => "Operacja została zakończona!!",
-				NoHandler = () => "Operacja przerwana..//..//..//..//...//..//..//.//.//.//"
+				NoHandler = () => "Operacja przerwana..//..//..//..//...//..//..//.//.//.//.//"
 			};
 
 
